@@ -4,7 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Agenda do barbeiro</title>
+<meta name="theme-color" content="#111111">
+<title>Zcorte · Agenda</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Zcorte">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
@@ -14,8 +21,8 @@
 <div class="pole" aria-hidden="true"></div>
 <main class="wrap">
   <header>
-    <span class="eyebrow">Área do barbeiro</span>
-    <h1>Agenda</h1>
+    <span class="eyebrow">Área do dono</span>
+    <h1>Zcorte</h1>
   </header>
 
   <section id="login">
@@ -28,66 +35,428 @@
     </form>
   </section>
 
-  <section id="panel" hidden>
-    <label for="adate">Dia<input type="date" id="adate"></label>
-    <div id="count" class="hint"></div>
-    <div id="alist" class="list"></div>
-    <button class="ghost" id="refresh">Atualizar</button>
-    <button class="link" id="out">Sair</button>
-  </section>
+  <div id="panel" hidden style="display:flex;flex-direction:column;gap:14px">
+    <nav class="tabs" id="tabs">
+      <button class="tab" data-tab="agenda">Agenda</button>
+      <button class="tab" data-tab="novo">Novo</button>
+      <button class="tab" data-tab="bloq">Bloquear</button>
+      <button class="tab" data-tab="cli">Clientes</button>
+      <button class="tab" data-tab="rel">Relatório</button>
+      <button class="tab" data-tab="aj">Ajustes</button>
+    </nav>
+
+    <!-- Agenda -->
+    <section id="t_agenda">
+      <div id="count" class="hint"></div>
+      <div id="alist" class="list"></div>
+      <button class="ghost" id="refresh">Atualizar</button>
+      <button class="ghost" id="expAg">Baixar agenda (planilha)</button>
+    </section>
+
+    <!-- Novo agendamento -->
+    <section id="t_novo" hidden>
+      <h2>Novo agendamento</h2>
+      <p class="hint">Para cliente que chamou no WhatsApp ou chegou sem marcar.</p>
+      <div class="form2">
+        <label class="full" for="nName">Nome<input type="text" id="nName" placeholder="Nome do cliente"></label>
+        <label class="full" for="nPhone">Celular<input type="tel" id="nPhone" inputmode="tel" placeholder="(85) 99999-9999"></label>
+        <label class="full" for="nSvc">Serviço<select id="nSvc"></select></label>
+        <label class="full" id="nBarBox" for="nBar">Barbeiro<select id="nBar"></select></label>
+        <label for="nDate">Dia<input type="date" id="nDate"></label>
+        <label for="nTime">Horário<select id="nTime"></select></label>
+      </div>
+      <div id="nMsg" class="msg" hidden></div>
+      <button class="cta" id="nGo">Agendar</button>
+    </section>
+
+    <!-- Bloquear -->
+    <section id="t_bloq" hidden>
+      <h2>Bloquear horários</h2>
+      <p class="hint">Almoço, folga, feriado ou férias. Os clientes não conseguem marcar nesses horários.</p>
+      <div class="form2">
+        <label class="full" for="bBar">Quem<select id="bBar"></select></label>
+        <label for="bFrom">De (dia)<input type="date" id="bFrom"></label>
+        <label for="bTo">Até (dia)<input type="date" id="bTo"></label>
+        <label class="chk full"><input type="checkbox" id="bAll"> Dia inteiro</label>
+        <label for="bT1">Das<input type="time" id="bT1" step="1800" value="12:00"></label>
+        <label for="bT2">Até às<input type="time" id="bT2" step="1800" value="13:00"></label>
+        <label class="full" for="bWhy">Motivo (só você vê)<input type="text" id="bWhy" placeholder="Almoço, folga, feriado..."></label>
+      </div>
+      <div id="bMsg" class="msg" hidden></div>
+      <button class="cta" id="bGo">Bloquear</button>
+      <div class="sec">Bloqueios ativos</div>
+      <div id="bList" class="list"></div>
+    </section>
+
+    <!-- Clientes -->
+    <section id="t_cli" hidden>
+      <h2>Clientes</h2>
+      <input type="text" id="cSearch" placeholder="Buscar por nome ou telefone">
+      <div id="cCount" class="hint"></div>
+      <div id="cList" class="list"></div>
+      <button class="ghost" id="expCli">Baixar clientes (planilha)</button>
+      <p class="mini">Guardamos nome, telefone, cortes e faltas. Cliente sem visita há 12 meses é apagado sozinho.</p>
+    </section>
+
+    <!-- Relatório -->
+    <section id="t_rel" hidden>
+      <h2>Relatório do mês</h2>
+      <label for="rMonth">Mês<input type="month" id="rMonth"></label>
+      <div id="rBody"></div>
+      <p class="mini">Conta só os atendimentos que você marcou como "Compareceu". Corte grátis entra como R$ 0.</p>
+    </section>
+
+    <!-- Ajustes -->
+    <section id="t_aj" hidden>
+      <h2>Serviços</h2>
+      <div id="svList" class="list"></div>
+      <div class="sec">Novo serviço</div>
+      <div class="form2">
+        <label class="full" for="sName">Nome<input type="text" id="sName" placeholder="Ex.: Pigmentação"></label>
+        <label for="sMin">Minutos<input type="number" id="sMin" min="10" max="240" step="5" value="30"></label>
+        <label for="sPrice">Preço (R$)<input type="number" id="sPrice" min="0" step="1" value="30"></label>
+      </div>
+      <button class="ghost" id="sAdd">Adicionar serviço</button>
+
+      <h2 style="margin-top:12px">Barbeiros</h2>
+      <div id="brList" class="list"></div>
+      <div class="form2">
+        <label class="full" for="brName">Novo barbeiro<input type="text" id="brName" placeholder="Nome"></label>
+      </div>
+      <button class="ghost" id="brAdd">Adicionar barbeiro</button>
+
+      <h2 style="margin-top:12px">Loja</h2>
+      <div class="form2">
+        <label for="hOpen">Abre às (hora)<input type="number" id="hOpen" min="0" max="23"></label>
+        <label for="hClose">Fecha às (hora)<input type="number" id="hClose" min="1" max="24"></label>
+        <label for="hAhead">Agenda aberta por (dias)<input type="number" id="hAhead" min="1" max="120"></label>
+        <label for="hLoy">Corte grátis a cada (cortes)<input type="number" id="hLoy" min="0" max="50"></label>
+        <label class="full" for="hWa">WhatsApp da barbearia (com 55 e DDD)<input type="tel" id="hWa" inputmode="numeric" placeholder="5588999999999"></label>
+      </div>
+      <div class="sec">Dias fechados</div>
+      <div class="days" id="hDays"></div>
+      <div id="hMsg" class="msg" hidden></div>
+      <button class="cta" id="hSave">Salvar loja</button>
+
+      <h2 style="margin-top:12px">Conta</h2>
+      <p class="hint">Para instalar na tela inicial: no Chrome, menu (três pontos) &gt; Adicionar à tela inicial. No iPhone, Compartilhar &gt; Adicionar à Tela de Início.</p>
+      <button class="ghost" id="install" hidden>Instalar o painel</button>
+      <button class="link" id="out">Sair</button>
+    </section>
+  </div>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script>
 const C = window.CONFIG, $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad = n => String(n).padStart(2,'0');
-const today = () => { const d = new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); };
+const ymd = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today = () => ymd(new Date());
+const addDays = n => { const d = new Date(); d.setDate(d.getDate()+n); return ymd(d); };
+const parse = s => { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
+const longDate = s => parse(s).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+const brDate = s => s ? parse(s).toLocaleDateString('pt-BR') : '-';
+const brl = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR');
+const digits = p => String(p||'').replace(/\D/g,'');
+const norm = p => digits(p).slice(-11);
+const waLink = p => { let d = digits(p); if (d.length <= 11) d = '55' + d; return 'https://wa.me/' + d; };
+const hm = m => pad(Math.floor(m/60))+':'+pad(m%60);
+const STEP = 30;
 const sb = supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
-let known = null, timer = null;
 
-function digits(p){ return p.replace(/\D/g,''); }
+let SH = null, SV = [], BR = [], CU = {}, known = null, timer = null, curTab = 'agenda', lastRows = [], lastCustomers = [];
 
-async function load(beep){
-  const day = $('adate').value;
-  const { data, error } = await sb.from('bookings').select('*').eq('date', day).order('start_time');
-  if (error){ $('alist').innerHTML = '<p class="hint">Não foi possível carregar a agenda.</p>'; return; }
-  $('count').textContent = data.length ? `${data.length} agendamento${data.length>1?'s':''} em ${day.split('-').reverse().join('/')}` : '';
-  $('alist').innerHTML = data.length ? data.map(b => `
-    <div class="item">
-      <span class="h">${esc(b.start_time)}</span>
-      <div><b>${esc(b.name)}</b><small>${esc(b.service)} · R$ ${b.price}${(C.barbers||[]).length>1 ? ' · '+esc(b.barber) : ''}</small>
-        <a class="link" href="https://wa.me/55${digits(b.phone).replace(/^55/,'')}" target="_blank" rel="noopener">${esc(b.phone)}</a></div>
-      <button class="x" data-id="${esc(b.id)}">Cancelar</button>
-    </div>`).join('') : '<p class="hint">Nenhum agendamento neste dia.</p>';
-  const ids = data.map(b => b.id).join(',');
-  if (beep && known !== null && ids !== known && data.length > 0) document.title = 'Novo agendamento! · Agenda';
+async function loadMeta(){
+  const [a, b, c] = await Promise.all([
+    sb.from('shop').select('*').eq('id', 1).single(),
+    sb.from('services').select('*').order('sort').order('minutes'),
+    sb.from('barbers').select('*').order('sort')
+  ]);
+  SH = a.data || { open_h: 9, close_h: 19, closed_days: [0], days_ahead: 28, whatsapp: '', loyalty_every: 10 };
+  SV = b.data || []; BR = c.data || [];
+}
+const multi = () => BR.filter(b => b.active).length > 1;
+const barberName = id => (BR.find(b => b.id === id) || {}).name || id;
+
+/* ---------- planilha ---------- */
+function download(name, rows){
+  const csv = '﻿' + rows.map(r => r.map(v => '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"').join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* ---------- abas ---------- */
+const TABS = ['agenda','novo','bloq','cli','rel','aj'];
+function tab(n){
+  curTab = n;
+  TABS.forEach(t => { $('t_'+t).hidden = t !== n; document.querySelector(`[data-tab="${t}"]`).setAttribute('aria-pressed', String(t === n)); });
+  ({ agenda: () => loadAgenda(false), novo: initNovo, bloq: initBloq, cli: loadClients, rel: loadReport, aj: renderSettings })[n]();
+}
+
+/* ---------- agenda ---------- */
+const STATUS = { concluido: ['Compareceu','good'], gratis: ['Corte grátis','gift'], faltou: ['Faltou','bad'] };
+function itemHtml(b){
+  const c = CU[norm(b.phone)] || { faltas: 0, cuts: 0 };
+  const gift = SH.loyalty_every > 0 && c.cuts >= SH.loyalty_every;
+  let chips = '';
+  if (c.faltas > 0 && b.status === 'agendado') chips += `<span class="chip bad">Já faltou ${c.faltas}x: cobrar mais metade</span> `;
+  if (gift && b.status === 'agendado') chips += '<span class="chip gift">Corte grátis</span> ';
+  if (b.status !== 'agendado' && STATUS[b.status]) chips += `<span class="chip ${STATUS[b.status][1]}">${STATUS[b.status][0]}</span>`;
+  const acts = b.status === 'agendado' ? `<div class="acts">
+      <button class="ok2" data-act="concluido" data-id="${esc(b.id)}">Compareceu</button>
+      ${gift ? `<button class="ok2" data-act="gratis" data-id="${esc(b.id)}">Aplicar grátis</button>` : ''}
+      <button class="gray" data-act="faltou" data-id="${esc(b.id)}">Faltou</button>
+      <button class="x" data-act="cancel" data-id="${esc(b.id)}">Cancelar</button></div>` : '';
+  return `<div class="item wide"><span class="h">${esc(b.start_time)}</span>
+    <div><b>${esc(b.name)}</b><small>${esc(b.service)} · ${brl(b.price)}${multi() ? ' · ' + esc(barberName(b.barber)) : ''}</small>
+    <a class="link" href="${waLink(b.phone)}" target="_blank" rel="noopener">${esc(b.phone)}</a>
+    <div>${chips}</div>${acts}</div></div>`;
+}
+async function loadAgenda(beep){
+  const [bk, cu] = await Promise.all([
+    sb.from('bookings').select('*').gte('date', addDays(-14)).order('date').order('start_time'),
+    sb.from('customers').select('phone,faltas,cuts')
+  ]);
+  if (bk.error){ $('alist').innerHTML = '<p class="hint">Não foi possível carregar a agenda.</p>'; return; }
+  CU = {}; (cu.data || []).forEach(c => CU[c.phone] = c);
+  lastRows = bk.data;
+  const t = today();
+  const pending = bk.data.filter(b => b.status === 'agendado' && b.date < t);
+  const upcoming = bk.data.filter(b => b.date >= t);
+  const open = upcoming.filter(b => b.status === 'agendado').length;
+  $('count').textContent = open ? `${open} agendamento${open>1?'s':''} pela frente` : '';
+  let h = '';
+  if (pending.length){
+    h += '<div class="notice warn">Estes já passaram. Marque se o cliente veio ou faltou, senão não entram no relatório.</div>';
+    h += pending.map(b => `<div class="mini" style="margin-top:6px">${esc(longDate(b.date))}</div>` + itemHtml(b)).join('');
+  }
+  let last = '';
+  h += upcoming.map(b => { const head = b.date !== last ? `<div class="dayhead">${esc(b.date === t ? 'Hoje · ' : '')}${esc(longDate(b.date))}</div>` : ''; last = b.date; return head + itemHtml(b); }).join('');
+  if (!pending.length && !upcoming.length) h = '<p class="hint">Nenhum agendamento por enquanto.</p>';
+  $('alist').innerHTML = h;
+  const ids = bk.data.map(b => b.id).join(',');
+  if (beep && known !== null && ids !== known && bk.data.length > 0) document.title = 'Novo agendamento! · Zcorte';
   known = ids;
 }
+$('alist').addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const id = b.dataset.id, act = b.dataset.act;
+  if (act === 'cancel'){
+    if (!confirm('Cancelar este agendamento? O horário volta a ficar livre.')) return;
+    await sb.from('bookings').delete().eq('id', id);
+  } else {
+    b.disabled = true;
+    const { error } = await sb.rpc('mark_booking', { p_id: id, p_status: act });
+    if (error) alert('Não consegui marcar agora. Tente de novo.');
+  }
+  loadAgenda(false);
+});
+$('refresh').addEventListener('click', () => { document.title = 'Zcorte · Agenda'; loadAgenda(false); });
+$('expAg').addEventListener('click', () => {
+  const rows = [['Data','Hora','Serviço','Preço','Barbeiro','Nome','Telefone','Situação']];
+  lastRows.forEach(b => rows.push([b.date, b.start_time, b.service, b.price, barberName(b.barber), b.name, b.phone, b.status]));
+  download('agenda-zcorte-' + today() + '.csv', rows);
+});
 
+/* ---------- novo agendamento ---------- */
+function opts(list, f){ return list.map(x => `<option value="${esc(x.id)}">${esc(f(x))}</option>`).join(''); }
+function initNovo(){
+  $('nSvc').innerHTML = opts(SV.filter(s => s.active), s => `${s.name} · ${s.minutes} min · ${brl(s.price)}`);
+  $('nBar').innerHTML = opts(BR.filter(b => b.active), b => b.name);
+  $('nBarBox').hidden = !multi();
+  if (!$('nDate').value) $('nDate').value = today();
+  loadFree();
+}
+async function loadFree(){
+  const svc = SV.find(s => s.id === $('nSvc').value), bar = $('nBar').value, date = $('nDate').value;
+  if (!svc || !bar || !date){ $('nTime').innerHTML = ''; return; }
+  const { data } = await sb.from('slots').select('t').eq('date', date).eq('barber', bar);
+  const taken = new Set((data || []).map(r => r.t)), n = Math.ceil(svc.minutes / STEP), now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes(), out = [];
+  for (let m = SH.open_h*60; m + n*STEP <= SH.close_h*60; m += STEP){
+    if (date === today() && m + STEP <= nowMin) continue;
+    let ok = true; for (let i = 0; i < n; i++) if (taken.has(hm(m + i*STEP))) ok = false;
+    if (ok) out.push(hm(m));
+  }
+  $('nTime').innerHTML = out.length ? out.map(t => `<option>${t}</option>`).join('') : '<option value="">Sem horário livre</option>';
+}
+['nSvc','nBar','nDate'].forEach(id => $(id).addEventListener('change', loadFree));
+$('nPhone').addEventListener('input', e => {
+  const d = e.target.value.replace(/\D/g,'').slice(0,11), cut = d.length > 10 ? 7 : 6;
+  e.target.value = d.length > 2 ? '(' + d.slice(0,2) + ') ' + d.slice(2, cut) + (d.length > cut ? '-' + d.slice(cut) : '') : d;
+});
+function say(id, txt, good){ const m = $(id); m.textContent = txt; m.hidden = false; m.style.background = good ? '#e6f2e6' : ''; m.style.color = good ? '#235c2a' : ''; m.style.borderColor = good ? '#bcd9bf' : ''; }
+$('nGo').addEventListener('click', async () => {
+  $('nMsg').hidden = true;
+  const name = $('nName').value.trim(), phone = $('nPhone').value.trim(), time = $('nTime').value;
+  if (name.length < 2 || digits(phone).length < 10 || !time){ say('nMsg', 'Preencha nome, celular e horário.'); return; }
+  const { error } = await sb.rpc('book', { p_name: name, p_phone: phone, p_items: [{ service_id: $('nSvc').value, barber: $('nBar').value, date: $('nDate').value, start: time }] });
+  if (error){ say('nMsg', error.code === '23505' ? 'Esse horário acabou de ser ocupado.' : 'Não consegui agendar: ' + error.message); loadFree(); return; }
+  say('nMsg', 'Agendado para ' + longDate($('nDate').value) + ' às ' + time + '.', true);
+  $('nName').value = ''; $('nPhone').value = ''; loadFree();
+});
+
+/* ---------- bloqueios ---------- */
+function initBloq(){
+  $('bBar').innerHTML = '<option value="all">Todos os barbeiros</option>' + opts(BR.filter(b => b.active), b => b.name);
+  if (!$('bFrom').value){ $('bFrom').value = today(); $('bTo').value = today(); }
+  toggleAll(); loadBlocks();
+}
+function toggleAll(){ const all = $('bAll').checked; $('bT1').disabled = all; $('bT2').disabled = all; }
+$('bAll').addEventListener('change', toggleAll);
+$('bGo').addEventListener('click', async () => {
+  $('bMsg').hidden = true;
+  const all = $('bAll').checked;
+  const t1 = all ? hm(SH.open_h*60) : $('bT1').value, t2 = all ? hm(SH.close_h*60) : $('bT2').value;
+  const f = $('bFrom').value, to = $('bTo').value || f;
+  if (!f || !t1 || !t2){ say('bMsg', 'Escolha o dia e o horário.'); return; }
+  const mm = t => +t.split(':')[1];
+  if (mm(t1) % 30 || mm(t2) % 30){ say('bMsg', 'Use horários cheios ou meia hora (12:00, 12:30).'); return; }
+  const { error } = await sb.rpc('block_time', { p_barber: $('bBar').value, p_from_date: f, p_to_date: to, p_from: t1, p_to: t2, p_reason: $('bWhy').value.trim() });
+  if (error){ say('bMsg', error.code === '23505' ? 'Já existe agendamento (ou bloqueio) nesse período. Cancele o agendamento primeiro.' : 'Não consegui bloquear: ' + error.message); return; }
+  say('bMsg', 'Horários bloqueados.', true); $('bWhy').value = ''; loadBlocks();
+});
+async function loadBlocks(){
+  const { data } = await sb.from('blocks').select('*').gte('date', today()).order('date').order('from_t');
+  const groups = {};
+  (data || []).forEach(b => { const k = [b.barber, b.from_t, b.to_t, b.reason].join('|'); (groups[k] = groups[k] || []).push(b); });
+  const list = Object.values(groups).sort((a, b) => a[0].date < b[0].date ? -1 : 1);
+  $('bList').innerHTML = list.length ? list.map(g => {
+    const a = g[0], z = g[g.length-1];
+    const when = g.length > 1 ? `${brDate(a.date)} a ${brDate(z.date)} (${g.length} dias)` : brDate(a.date);
+    const full = a.from_t === hm(SH.open_h*60) && a.to_t === hm(SH.close_h*60);
+    return `<div class="item col"><div><b>${esc(when)}</b><small>${full ? 'Dia inteiro' : esc(a.from_t) + ' às ' + esc(a.to_t)}${multi() ? ' · ' + esc(barberName(a.barber)) : ''}${a.reason ? ' · ' + esc(a.reason) : ''}</small></div>
+      <div class="acts"><button class="x" data-ids="${g.map(x => x.id).join(',')}">Remover</button></div></div>`;
+  }).join('') : '<p class="hint">Nenhum bloqueio.</p>';
+}
+$('bList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-ids]'); if (!b) return;
+  if (!confirm('Remover este bloqueio? Os horários voltam a ficar livres.')) return;
+  await sb.from('blocks').delete().in('id', b.dataset.ids.split(',').map(Number)); loadBlocks();
+});
+
+/* ---------- clientes ---------- */
+async function loadClients(){
+  const { data, error } = await sb.from('customers').select('*');
+  if (error){ $('cList').innerHTML = '<p class="hint">Não foi possível carregar.</p>'; return; }
+  lastCustomers = data.sort((a, b) => (b.last_visit || b.last_booking || b.first_seen || '') < (a.last_visit || a.last_booking || a.first_seen || '') ? -1 : 1);
+  renderClients();
+}
+function renderClients(){
+  const q = $('cSearch').value.trim().toLowerCase(), qd = digits(q);
+  const list = lastCustomers.filter(c => !q || c.name.toLowerCase().includes(q) || (qd && c.phone.includes(qd)));
+  $('cCount').textContent = `${list.length} cliente${list.length === 1 ? '' : 's'}`;
+  const ev = SH.loyalty_every;
+  $('cList').innerHTML = list.map(c => `<div class="item col"><div><b>${esc(c.name)}</b>
+    <a class="link" href="${waLink(c.phone)}" target="_blank" rel="noopener">${esc(c.phone)}</a>
+    <small>${ev > 0 ? c.cuts + ' de ' + ev + ' cortes · ' : ''}${c.total_cuts} no total · faltas: ${c.faltas} · última visita: ${esc(brDate(c.last_visit))}</small>
+    ${ev > 0 && c.cuts >= ev ? '<span class="chip gift">Corte grátis disponível</span>' : ''}
+    ${c.faltas > 0 ? `<div class="acts"><button class="gray" data-zero="${esc(c.phone)}">Zerar faltas</button></div>` : ''}</div></div>`).join('') || '<p class="hint">Nenhum cliente ainda.</p>';
+}
+$('cSearch').addEventListener('input', renderClients);
+$('cList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-zero]'); if (!b) return;
+  await sb.from('customers').update({ faltas: 0 }).eq('phone', b.dataset.zero); loadClients();
+});
+$('expCli').addEventListener('click', () => {
+  const rows = [['Nome','Telefone','Cortes (ciclo)','Cortes (total)','Faltas','Última visita','Primeiro contato']];
+  lastCustomers.forEach(c => rows.push([c.name, c.phone, c.cuts, c.total_cuts, c.faltas, c.last_visit || '', c.first_seen || '']));
+  download('clientes-zcorte-' + today() + '.csv', rows);
+});
+
+/* ---------- relatório ---------- */
+async function loadReport(){
+  if (!$('rMonth').value) $('rMonth').value = today().slice(0, 7);
+  const m = $('rMonth').value;
+  const { data, error } = await sb.from('stats').select('*').eq('month', m);
+  if (error){ $('rBody').innerHTML = '<p class="hint">Não foi possível carregar.</p>'; return; }
+  if (!data.length){ $('rBody').innerHTML = '<p class="hint">Sem atendimentos marcados neste mês.</p>'; return; }
+  const group = key => { const g = {}; data.forEach(r => { const k = key(r); g[k] = g[k] || { qty: 0, revenue: 0, faltas: 0 }; g[k].qty += r.qty; g[k].revenue += r.revenue; g[k].faltas += r.faltas; }); return g; };
+  const table = (title, g) => `<div class="sec">${title}</div><table class="rep"><tr><th>${title === 'Por serviço' ? 'Serviço' : 'Barbeiro'}</th><th class="r">Qtd</th><th class="r">Receita</th><th class="r">Faltas</th></tr>` +
+    Object.entries(g).sort((a, b) => b[1].revenue - a[1].revenue).map(([k, v]) => `<tr><td>${esc(title === 'Por serviço' ? k : barberName(k))}</td><td class="r">${v.qty}</td><td class="r">${brl(v.revenue)}</td><td class="r">${v.faltas}</td></tr>`).join('') + '</table>';
+  const tot = data.reduce((a, r) => ({ qty: a.qty + r.qty, revenue: a.revenue + r.revenue, faltas: a.faltas + r.faltas }), { qty: 0, revenue: 0, faltas: 0 });
+  $('rBody').innerHTML = `<div class="sum"><span>Receita</span><span class="tot">${brl(tot.revenue)}</span></div>
+    <p class="hint">${tot.qty} atendimento${tot.qty === 1 ? '' : 's'} · ${tot.faltas} falta${tot.faltas === 1 ? '' : 's'}</p>` +
+    table('Por serviço', group(r => r.service)) + (multi() ? table('Por barbeiro', group(r => r.barber)) : '');
+}
+$('rMonth').addEventListener('change', loadReport);
+
+/* ---------- ajustes ---------- */
+const DAYS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+function renderSettings(){
+  $('svList').innerHTML = SV.map(s => `<div class="item col" data-sid="${esc(s.id)}"><div class="form2">
+    <label class="full">Nome<input type="text" data-f="name" value="${esc(s.name)}"></label>
+    <label>Minutos<input type="number" data-f="minutes" min="10" max="240" step="5" value="${s.minutes}"></label>
+    <label>Preço (R$)<input type="number" data-f="price" min="0" step="1" value="${s.price}"></label>
+    <label class="chk full"><input type="checkbox" data-f="active" ${s.active ? 'checked' : ''}> Aparece para os clientes</label></div>
+    <div class="acts"><button class="ok2" data-save-sv="${esc(s.id)}">Salvar</button></div></div>`).join('');
+  $('brList').innerHTML = BR.map(b => `<div class="item col" data-bid="${esc(b.id)}"><div class="form2">
+    <label class="full">Nome<input type="text" data-f="name" value="${esc(b.name)}"></label>
+    <label class="chk full"><input type="checkbox" data-f="active" ${b.active ? 'checked' : ''}> Atende clientes</label></div>
+    <div class="acts"><button class="ok2" data-save-br="${esc(b.id)}">Salvar</button></div></div>`).join('');
+  $('hOpen').value = SH.open_h; $('hClose').value = SH.close_h; $('hAhead').value = SH.days_ahead; $('hLoy').value = SH.loyalty_every; $('hWa').value = SH.whatsapp;
+  $('hDays').innerHTML = DAYS.map((d, i) => `<label class="chk"><input type="checkbox" data-day="${i}" ${SH.closed_days.includes(i) ? 'checked' : ''}> ${d}</label>`).join('');
+}
+const rowVals = row => { const o = {}; row.querySelectorAll('[data-f]').forEach(i => o[i.dataset.f] = i.type === 'checkbox' ? i.checked : i.value); return o; };
+$('svList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-save-sv]'); if (!b) return;
+  const v = rowVals(b.closest('[data-sid]'));
+  if (!v.name.trim() || +v.minutes < 10 || +v.price < 0){ alert('Confira nome, minutos e preço.'); return; }
+  const { error } = await sb.from('services').update({ name: v.name.trim(), minutes: +v.minutes, price: Math.round(+v.price), active: v.active }).eq('id', b.dataset.saveSv);
+  if (error) alert('Não consegui salvar.'); else { await loadMeta(); renderSettings(); b.textContent = 'Salvo'; }
+});
+$('brList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-save-br]'); if (!b) return;
+  const v = rowVals(b.closest('[data-bid]'));
+  if (!v.name.trim()){ alert('Digite o nome.'); return; }
+  const { error } = await sb.from('barbers').update({ name: v.name.trim(), active: v.active }).eq('id', b.dataset.saveBr);
+  if (error) alert('Não consegui salvar.'); else { await loadMeta(); renderSettings(); }
+});
+$('sAdd').addEventListener('click', async () => {
+  const name = $('sName').value.trim(), min = +$('sMin').value, price = Math.round(+$('sPrice').value);
+  if (!name || min < 10 || price < 0){ alert('Confira nome, minutos e preço.'); return; }
+  const { error } = await sb.from('services').insert({ id: 's' + Date.now().toString(36), name, minutes: min, price, active: true, sort: SV.length + 1 });
+  if (error) alert('Não consegui adicionar.'); else { $('sName').value = ''; await loadMeta(); renderSettings(); }
+});
+$('brAdd').addEventListener('click', async () => {
+  const name = $('brName').value.trim(); if (!name){ alert('Digite o nome.'); return; }
+  const id = (name.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '') || 'b') + Math.random().toString(36).slice(2, 5);
+  const { error } = await sb.from('barbers').insert({ id, name, active: true, sort: BR.length + 1 });
+  if (error) alert('Não consegui adicionar.'); else { $('brName').value = ''; await loadMeta(); renderSettings(); }
+});
+$('hSave').addEventListener('click', async () => {
+  const open = +$('hOpen').value, close = +$('hClose').value;
+  if (!(open >= 0 && close > open && close <= 24)){ say('hMsg', 'Confira o horário de abrir e fechar.'); return; }
+  const closed = [...document.querySelectorAll('[data-day]')].filter(i => i.checked).map(i => +i.dataset.day);
+  const { error } = await sb.from('shop').update({ open_h: open, close_h: close, days_ahead: Math.max(1, +$('hAhead').value || 28), loyalty_every: Math.max(0, +$('hLoy').value || 0), whatsapp: digits($('hWa').value), closed_days: closed }).eq('id', 1);
+  if (error){ say('hMsg', 'Não consegui salvar.'); return; }
+  await loadMeta(); say('hMsg', 'Salvo.', true);
+});
+
+/* ---------- entrar / sair ---------- */
 async function show(){
   $('login').hidden = true; $('panel').hidden = false;
-  if (!$('adate').value) $('adate').value = today();
-  await load(false);
-  clearInterval(timer); timer = setInterval(() => { if (!document.hidden) load(true); }, 15000);
+  await loadMeta(); tab('agenda');
+  clearInterval(timer); timer = setInterval(() => { if (!document.hidden && curTab === 'agenda') loadAgenda(true); }, 15000);
 }
-
+$('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) tab(b.dataset.tab); });
 $('form').addEventListener('submit', async e => {
   e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pass').value });
   if (error){ $('lerr').textContent = 'E-mail ou senha incorretos.'; $('lerr').hidden = false; return; }
   show();
 });
-$('adate').addEventListener('change', () => { known = null; load(false); });
-$('refresh').addEventListener('click', () => { document.title = 'Agenda do barbeiro'; load(false); });
 $('out').addEventListener('click', async () => { await sb.auth.signOut(); clearInterval(timer); $('panel').hidden = true; $('login').hidden = false; });
-$('alist').addEventListener('click', async e => {
-  const b = e.target.closest('[data-id]'); if (!b) return;
-  if (!confirm('Cancelar este agendamento? O horário volta a ficar livre.')) return;
-  await sb.from('bookings').delete().eq('id', b.dataset.id); load(false);
-});
-sb.auth.getSession().then(({data}) => { if (data.session) show(); });
+sb.auth.getSession().then(({ data }) => { if (data.session) show(); });
+
+/* ---------- instalar como app ---------- */
+let deferred = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; $('install').hidden = false; });
+$('install').addEventListener('click', async () => { if (deferred){ deferred.prompt(); deferred = null; $('install').hidden = true; } });
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>

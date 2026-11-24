@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Zcorte</title>
+<meta name="theme-color" content="#111111">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
@@ -17,6 +20,7 @@
       <span class="eyebrow" id="hours"></span>
       <h1 id="shop"></h1>
       <p class="sub" id="tag"></p>
+      <button class="link" id="mineBtn">Meus agendamentos</button>
     </div>
     <button class="cartbtn" id="cartBtn" hidden></button>
   </div>
@@ -24,7 +28,8 @@
   <!-- 1. Serviços -->
   <section id="vServices">
     <h2>Serviços</h2>
-    <div class="rows" id="services"></div>
+    <div class="rows" id="services"><p class="hint">Carregando...</p></div>
+    <p class="notice">Faltou sem avisar? No próximo agendamento cobramos mais metade do serviço. Se precisar cancelar, avise pelo WhatsApp.</p>
   </section>
 
   <!-- 2. Barbeiro, dia e horário -->
@@ -53,6 +58,8 @@
     <div class="list" id="cartList"></div>
     <label for="name">Nome<input type="text" id="name" autocomplete="name" placeholder="Digite seu nome"></label>
     <label for="phone">Celular (WhatsApp)<input type="tel" id="phone" autocomplete="tel" inputmode="tel" placeholder="(85) 99999-9999"></label>
+    <p class="notice warn" id="faltaWarn" hidden></p>
+    <p class="notice" id="giftNote" hidden></p>
     <div class="sum"><span>Total</span><span class="tot" id="total"></span></div>
     <div id="err" class="msg" hidden></div>
     <button class="cta" id="go" aria-disabled="true">Finalizar</button>
@@ -62,10 +69,20 @@
   <!-- 4. Pronto -->
   <section class="done" id="vDone" hidden>
     <div class="big">Agendado!</div>
-    <p class="hint">Seu horário está reservado. Chegue alguns minutos antes.</p>
+    <p class="hint">Seu horário está reservado. Chegue alguns minutos antes. Para ver ou cancelar depois, use "Meus agendamentos" com o seu celular.</p>
     <div class="ticket" id="ticket"></div>
     <a class="ghost" id="wa" href="#" target="_blank" rel="noopener">Avisar no WhatsApp (opcional)</a>
-    <button class="cta" id="again">Fazer outro agendamento</button>
+    <button class="cta" id="again">Voltar ao início</button>
+  </section>
+
+  <!-- 5. Meus agendamentos -->
+  <section id="vMine" hidden>
+    <h2>Meus agendamentos</h2>
+    <p class="hint">Digite o celular que você usou para agendar.</p>
+    <label for="mphone">Celular<input type="tel" id="mphone" autocomplete="tel" inputmode="tel" placeholder="(85) 99999-9999"></label>
+    <button class="cta" id="mGo" aria-disabled="true">Ver meus agendamentos</button>
+    <div id="mRes" class="list"></div>
+    <button class="ghost" id="mBack">Voltar</button>
   </section>
 </main>
 
@@ -81,31 +98,31 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script>
-const C = window.CONFIG, SERVICES = C.services, BARBERS = C.barbers;
+const C = window.CONFIG;
 const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad = n => String(n).padStart(2,'0');
 const ymd = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const hm = m => pad(Math.floor(m/60))+':'+pad(m%60);
 const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
-const brl = v => 'R$ '+v.toLocaleString('pt-BR');
+const brl = v => 'R$ '+Number(v).toLocaleString('pt-BR');
 const parse = s => { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
 const longDate = s => parse(s).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+const shortDate = s => parse(s).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'}).replace('.','');
 const dur = m => m < 60 ? m+' min' : (m%60 ? Math.floor(m/60)+'h'+pad(m%60) : Math.floor(m/60)+'h');
-const blocksOf = svc => Math.ceil(svc.min / C.step);
+const STEP = 30;
+const blocksOf = svc => Math.ceil(svc.min / STEP);
+const digitsOf = s => String(s||'').replace(/\D/g,'');
 
-const configured = !C.SUPABASE_URL.startsWith('COLE');
-const sb = configured ? supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY) : null;
+const sb = supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
 
-const S = { svc: null, barber: BARBERS[0], date: null, time: null, weekStart: null, cart: [], takenByDate: {}, loaded: {} };
+let SH = null, SERVICES = [], BARBERS = [], TODAY = null, LAST = null;
+const S = { svc: null, barber: null, date: null, time: null, weekStart: null, cart: [], takenByDate: {}, loaded: {}, ready: false };
 
-/* ---------- dias ---------- */
-const NOW0 = new Date(), TODAY = new Date(NOW0.getFullYear(), NOW0.getMonth(), NOW0.getDate());
-const LAST = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() + C.daysAhead - 1);
 const mondayOf = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay()+6)%7)); return x; };
 function dayOpen(d){
-  if (d < TODAY || d > LAST || C.closedDays.includes(d.getDay())) return false;
-  if (ymd(d) === ymd(new Date())){ const n = new Date(); if (n.getHours()*60+n.getMinutes() >= C.close*60 - C.step) return false; }
+  if (d < TODAY || d > LAST || SH.closed_days.includes(d.getDay())) return false;
+  if (ymd(d) === ymd(new Date())){ const n = new Date(); if (n.getHours()*60+n.getMinutes() >= SH.close_h*60 - STEP) return false; }
   return true;
 }
 function firstOpenDay(){ for (let d = new Date(TODAY); d <= LAST; d.setDate(d.getDate()+1)) if (dayOpen(d)) return ymd(d); return null; }
@@ -113,7 +130,7 @@ function firstOpenDay(){ for (let d = new Date(TODAY); d <= LAST; d.setDate(d.ge
 /* ---------- horários ---------- */
 function startTimes(){
   const n = blocksOf(S.svc), res = [];
-  for (let m = C.open*60; m + n*C.step <= C.close*60; m += C.step) res.push(m);
+  for (let m = SH.open_h*60; m + n*STEP <= SH.close_h*60; m += STEP) res.push(m);
   return res;
 }
 function takenSet(date, barber){
@@ -123,12 +140,11 @@ function takenSet(date, barber){
 }
 function isFree(m){
   const n = blocksOf(S.svc), now = new Date(), tk = takenSet(S.date, S.barber.id);
-  if (S.date === ymd(now) && m <= now.getHours()*60 + now.getMinutes()) return false;
-  for (let i = 0; i < n; i++) if (tk.has(hm(m + i*C.step))) return false;
+  if (S.date === ymd(now) && m <= now.getHours()*60 + now.getMinutes() + 30) return false;
+  for (let i = 0; i < n; i++) if (tk.has(hm(m + i*STEP))) return false;
   return true;
 }
 async function loadTaken(date){
-  if (!sb) return;
   const { data, error } = await sb.from('slots').select('t,barber').eq('date', date);
   if (error){ if (date === S.date) $('timeHint').textContent = 'Não consegui carregar os horários agora. Tente de novo em instantes.'; return; }
   S.takenByDate[date] = data; S.loaded[date] = true;
@@ -136,16 +152,18 @@ async function loadTaken(date){
 }
 
 /* ---------- telas ---------- */
+const VIEWS = ['vServices','vSchedule','vCart','vDone','vMine'];
 function view(name){
-  ['vServices','vSchedule','vCart','vDone'].forEach(v => $(v).hidden = v !== name);
+  VIEWS.forEach(v => $(v).hidden = v !== name);
   window.scrollTo(0,0);
   const n = S.cart.length;
   $('cartBtn').hidden = !n || name === 'vCart' || name === 'vDone';
   $('cartBtn').textContent = `Carrinho (${n})`;
 }
 function renderServices(){
-  $('services').innerHTML = SERVICES.map(s =>
-    `<div class="row"><div><b>${esc(s.name)}</b><span class="d">${dur(s.min)} · ${brl(s.price)}</span></div><button class="btn" data-id="${s.id}">Reservar</button></div>`).join('');
+  $('services').innerHTML = SERVICES.length ? SERVICES.map(s =>
+    `<div class="row"><div><b>${esc(s.name)}</b><span class="d">${dur(s.min)} · ${brl(s.price)}</span></div><button class="btn" data-id="${esc(s.id)}">Reservar</button></div>`).join('')
+    : '<p class="hint">Nenhum serviço disponível no momento.</p>';
 }
 function renderPros(){
   $('proBox').hidden = BARBERS.length < 2;
@@ -169,10 +187,9 @@ function renderTimes(){
     const t = hm(m);
     return `<button class="t" data-t="${t}" ${isFree(m)?'':'disabled'} aria-pressed="${S.time===t}">${t}</button>`;
   }).join('');
-  $('timeHint').textContent = !configured ? 'Site ainda não configurado: faltam as chaves do banco de dados.'
-    : !S.loaded[S.date] ? 'Carregando horários...'
+  $('timeHint').textContent = !S.loaded[S.date] ? 'Carregando horários...'
     : list.some(isFree) ? 'Horários riscados já estão ocupados.' : 'Sem horários livres neste dia. Escolha outro dia.';
-  $('add').setAttribute('aria-disabled', S.time && configured ? 'false' : 'true');
+  $('add').setAttribute('aria-disabled', S.time ? 'false' : 'true');
 }
 function openSchedule(){
   $('selSvc').textContent = S.svc.name + ' · ' + dur(S.svc.min);
@@ -185,7 +202,7 @@ function renderCart(){
   $('cartList').innerHTML = S.cart.map((it,i) =>
     `<div class="item"><span class="h">${it.start}</span><div><b>${esc(it.svc.name)}</b><small>${esc(longDate(it.date))}${BARBERS.length>1 ? ' · '+esc(it.barberName) : ''} · ${brl(it.svc.price)}</small></div><button class="x" data-i="${i}">Remover</button></div>`).join('');
   $('total').textContent = brl(S.cart.reduce((a,it) => a + it.svc.price, 0));
-  const ok = configured && S.cart.length && $('name').value.trim().length > 1 && $('phone').value.replace(/\D/g,'').length >= 10;
+  const ok = S.cart.length && $('name').value.trim().length > 1 && digitsOf($('phone').value).length >= 10;
   $('go').setAttribute('aria-disabled', ok ? 'false' : 'true');
 }
 
@@ -193,34 +210,100 @@ function renderCart(){
 function addToCart(){
   if ($('add').getAttribute('aria-disabled') === 'true') return;
   S.cart.push({ date: S.date, barber: S.barber.id, barberName: S.barber.name, svc: S.svc, start: S.time,
-    times: Array.from({length: blocksOf(S.svc)}, (_,i) => hm(toMin(S.time) + i*C.step)) });
+    times: Array.from({length: blocksOf(S.svc)}, (_,i) => hm(toMin(S.time) + i*STEP)) });
   $('modal').hidden = false;
+}
+function friendly(error){
+  const m = (error && error.message || '');
+  if (m.includes('limite de agendamentos')) return 'Você já tem agendamentos em aberto demais. Cancele um pelo WhatsApp ou espere um deles passar.';
+  if (m.includes('horario muito proximo')) return 'Esse horário está muito próximo. Escolha um horário com pelo menos 30 minutos de antecedência.';
+  if (m.includes('dia fechado') || m.includes('fora do expediente')) return 'Esse horário não está disponível. Escolha outro, por favor.';
+  return 'Não consegui agendar agora. Confira sua conexão e tente de novo.';
 }
 async function finalize(){
   if ($('go').getAttribute('aria-disabled') === 'true') return;
   const err = $('err'); err.hidden = true;
   $('go').setAttribute('aria-disabled','true'); $('go').textContent = 'Agendando...';
-  const items = S.cart.map(it => ({ date: it.date, barber: it.barber, service: it.svc.name, price: it.svc.price, minutes: it.svc.min, times: it.times }));
+  const items = S.cart.map(it => ({ service_id: it.svc.id, barber: it.barber, date: it.date, start: it.start }));
   const { error } = await sb.rpc('book', { p_name: $('name').value.trim(), p_phone: $('phone').value.trim(), p_items: items });
   $('go').textContent = 'Finalizar';
   if (error){
     if (error.code === '23505'){
       const dates = [...new Set(S.cart.map(it => it.date))];
       S.cart = []; await Promise.all(dates.map(loadTaken));
-      err.textContent = 'Algum horário acabou de ser reservado por outra pessoa. Escolha de novo, por favor.';
-      err.hidden = false; view('vServices'); $('services').insertAdjacentHTML('beforebegin', `<div class="msg" id="tmpMsg">${err.textContent}</div>`);
+      view('vServices'); $('services').insertAdjacentHTML('beforebegin', '<div class="msg" id="tmpMsg">Algum horário acabou de ser reservado por outra pessoa. Escolha de novo, por favor.</div>');
       setTimeout(() => { const m = $('tmpMsg'); if (m) m.remove(); }, 8000);
-    } else { err.textContent = 'Não consegui agendar agora. Confira sua conexão e tente de novo.'; err.hidden = false; renderCart(); }
+    } else { err.textContent = friendly(error); err.hidden = false; renderCart(); }
     return;
   }
   const done = S.cart, name = $('name').value.trim();
   $('ticket').innerHTML = done.map(it => `<div class="item"><span class="h">${it.start}</span><div><b>${esc(it.svc.name)}</b><small>${esc(longDate(it.date))}${BARBERS.length>1 ? ' · '+esc(it.barberName) : ''}</small></div><span></span></div>`).join('');
-  const msg = `Olá! Agendei na ${C.name}: ` + done.map(it => `${it.svc.name}, ${longDate(it.date)} às ${it.start}`).join('; ') + `. Nome: ${name}.`;
-  $('wa').href = 'https://wa.me/' + C.whatsapp + '?text=' + encodeURIComponent(msg);
+  if (digitsOf(SH.whatsapp)){
+    const msg = `Olá! Agendei na ${C.name}: ` + done.map(it => `${it.svc.name}, ${longDate(it.date)} às ${it.start}`).join('; ') + `. Nome: ${name}.`;
+    $('wa').href = 'https://wa.me/' + digitsOf(SH.whatsapp) + '?text=' + encodeURIComponent(msg); $('wa').hidden = false;
+  } else $('wa').hidden = true;
   S.cart = []; view('vDone');
 }
 
-$('services').addEventListener('click', e => { const b = e.target.closest('.btn'); if (!b) return; S.svc = SERVICES.find(s => s.id === b.dataset.id); openSchedule(); });
+/* ---------- aviso de faltas / cliente fiel no carrinho ---------- */
+let infoTimer = null, lastInfoPhone = '';
+function checkInfo(){
+  clearTimeout(infoTimer);
+  const p = digitsOf($('phone').value);
+  if (p.length < 10){ $('faltaWarn').hidden = true; $('giftNote').hidden = true; lastInfoPhone = ''; return; }
+  if (p === lastInfoPhone) return;
+  infoTimer = setTimeout(async () => {
+    lastInfoPhone = p;
+    const { data } = await sb.rpc('my_bookings', { p_phone: p });
+    if (!data) return;
+    if (data.faltas > 0){ $('faltaWarn').textContent = `Você faltou ${data.faltas} vez${data.faltas>1?'es':''} sem avisar. Neste agendamento será cobrado mais metade do serviço.`; $('faltaWarn').hidden = false; }
+    else $('faltaWarn').hidden = true;
+    if (data.loyalty_every > 0 && data.cuts >= data.loyalty_every){ $('giftNote').textContent = 'Você tem um corte grátis! O barbeiro vai aplicar quando você chegar.'; $('giftNote').hidden = false; }
+    else $('giftNote').hidden = true;
+  }, 500);
+}
+
+/* ---------- meus agendamentos ---------- */
+const STATUS = { concluido: ['Concluído',''], gratis: ['Corte grátis','gift'], faltou: ['Faltou','bad'], agendado: ['','']};
+async function loadMine(){
+  const p = digitsOf($('mphone').value);
+  if (p.length < 10) return;
+  $('mGo').textContent = 'Buscando...';
+  const { data, error } = await sb.rpc('my_bookings', { p_phone: p });
+  $('mGo').textContent = 'Ver meus agendamentos';
+  const box = $('mRes');
+  if (error || !data){ box.innerHTML = '<p class="hint">Não consegui buscar agora. Tente de novo.</p>'; return; }
+  const today = ymd(new Date());
+  const up = data.items.filter(i => i.date >= today && i.status === 'agendado');
+  const past = data.items.filter(i => !(i.date >= today && i.status === 'agendado')).reverse();
+  const multi = BARBERS.length > 1;
+  const wa = digitsOf(SH.whatsapp);
+  let h = '';
+  if (data.faltas > 0) h += `<p class="notice warn">Você tem ${data.faltas} falta${data.faltas>1?'s':''} sem aviso. No próximo agendamento será cobrado mais metade do serviço.</p>`;
+  if (data.loyalty_every > 0){
+    const c = data.cuts, ev = data.loyalty_every;
+    h += c >= ev ? '<p class="notice"><b>Você ganhou um corte grátis!</b> Fale com o barbeiro no próximo agendamento.</p>'
+      : `<p class="notice">Cliente fiel: ${c} de ${ev} cortes. Faltam ${ev - c} para ganhar um corte grátis.</p>`;
+  }
+  if (data.last_visit) h += `<p class="hint">Última visita: ${esc(parse(data.last_visit).toLocaleDateString('pt-BR'))}</p>`;
+  h += '<div class="sec">Próximos</div>';
+  h += up.length ? up.map(i => {
+    const msg = `Olá! Quero cancelar meu agendamento de ${i.service}, ${longDate(i.date)} às ${i.time}. Celular: ${$('mphone').value}.`;
+    return `<div class="item"><span class="h">${esc(i.time)}</span><div><b>${esc(i.service)}</b><small>${esc(longDate(i.date))}${multi && i.barber ? ' · '+esc(i.barber) : ''}</small></div>${wa ? `<a class="x" target="_blank" rel="noopener" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}">Cancelar</a>` : '<span></span>'}</div>`;
+  }).join('') : '<p class="hint">Você não tem agendamentos futuros.</p>';
+  if (past.length){
+    h += '<div class="sec">Anteriores</div>';
+    h += past.map(i => { const st = STATUS[i.status] || ['','']; return `<div class="item"><span class="h">${esc(i.time)}</span><div><b>${esc(i.service)}</b><small>${esc(longDate(i.date))}${multi && i.barber ? ' · '+esc(i.barber) : ''}</small></div>${st[0] ? `<span class="chip ${st[1]}">${st[0]}</span>` : '<span></span>'}</div>`; }).join('');
+    h += '<p class="mini">Por segurança, o histórico detalhado fica guardado por 14 dias.</p>';
+  }
+  box.innerHTML = h;
+}
+function maskPhone(e){
+  const d = e.target.value.replace(/\D/g,'').slice(0,11), cut = d.length > 10 ? 7 : 6;
+  e.target.value = d.length > 2 ? '(' + d.slice(0,2) + ') ' + d.slice(2, cut) + (d.length > cut ? '-' + d.slice(cut) : '') : d;
+}
+
+$('services').addEventListener('click', e => { const b = e.target.closest('.btn'); if (!b || !S.ready) return; S.svc = SERVICES.find(s => s.id === b.dataset.id); openSchedule(); });
 $('pros').addEventListener('click', e => { const b = e.target.closest('.pro'); if (!b) return; S.barber = BARBERS.find(x => x.id === b.dataset.id); S.time = null; renderPros(); renderTimes(); });
 $('week').addEventListener('click', e => { const b = e.target.closest('.day'); if (!b || b.disabled) return; S.date = b.dataset.d; S.time = null; renderWeek(); renderTimes(); loadTaken(S.date); });
 $('prevW').addEventListener('click', () => { S.weekStart = new Date(S.weekStart.getFullYear(), S.weekStart.getMonth(), S.weekStart.getDate()-7); renderWeek(); });
@@ -228,25 +311,41 @@ $('nextW').addEventListener('click', () => { S.weekStart = new Date(S.weekStart.
 $('times').addEventListener('click', e => { const b = e.target.closest('.t'); if (!b || b.disabled) return; S.time = b.dataset.t; renderTimes(); });
 $('add').addEventListener('click', addToCart);
 $('back1').addEventListener('click', () => view('vServices'));
-$('mCont').addEventListener('click', () => { $('modal').hidden = true; renderCart(); view('vCart'); });
+$('mCont').addEventListener('click', () => { $('modal').hidden = true; renderCart(); view('vCart'); checkInfo(); });
 $('mMore').addEventListener('click', () => { $('modal').hidden = true; view('vServices'); });
-$('cartBtn').addEventListener('click', () => { renderCart(); view('vCart'); });
+$('cartBtn').addEventListener('click', () => { renderCart(); view('vCart'); checkInfo(); });
 $('more').addEventListener('click', () => view('vServices'));
 $('cartList').addEventListener('click', e => { const b = e.target.closest('.x'); if (!b) return; S.cart.splice(+b.dataset.i, 1); if (!S.cart.length) view('vServices'); else renderCart(); });
 $('name').addEventListener('input', renderCart);
-$('phone').addEventListener('input', e => {
-  const d = e.target.value.replace(/\D/g,'').slice(0,11), cut = d.length > 10 ? 7 : 6;
-  e.target.value = d.length > 2 ? '(' + d.slice(0,2) + ') ' + d.slice(2, cut) + (d.length > cut ? '-' + d.slice(cut) : '') : d;
-  renderCart();
-});
+$('phone').addEventListener('input', e => { maskPhone(e); renderCart(); checkInfo(); });
 $('go').addEventListener('click', finalize);
-$('again').addEventListener('click', () => { $('name').value = ''; $('phone').value = ''; view('vServices'); });
+$('again').addEventListener('click', () => { $('name').value = ''; $('phone').value = ''; $('faltaWarn').hidden = true; $('giftNote').hidden = true; lastInfoPhone = ''; view('vServices'); });
+$('mineBtn').addEventListener('click', () => { $('mRes').innerHTML = ''; view('vMine'); });
+$('mBack').addEventListener('click', () => view('vServices'));
+$('mphone').addEventListener('input', e => { maskPhone(e); $('mGo').setAttribute('aria-disabled', digitsOf(e.target.value).length >= 10 ? 'false' : 'true'); });
+$('mGo').addEventListener('click', () => { if ($('mGo').getAttribute('aria-disabled') !== 'true') loadMine(); });
 
-$('shop').textContent = C.name; $('tag').textContent = C.tagline;
-$('hours').textContent = `Aberto das ${C.open}h às ${C.close}h`;
-document.title = C.name;
-renderServices(); view('vServices');
-setInterval(() => { if (!document.hidden && !$('vSchedule').hidden && S.date) loadTaken(S.date); }, 20000);
+async function boot(){
+  $('shop').textContent = C.name; $('tag').textContent = C.tagline; document.title = C.name;
+  view('vServices');
+  const [a, b, c] = await Promise.all([
+    sb.from('shop').select('*').eq('id', 1).single(),
+    sb.from('services').select('*').eq('active', true).order('sort').order('minutes'),
+    sb.from('barbers').select('*').eq('active', true).order('sort')
+  ]);
+  if (a.error || b.error || c.error || !a.data){ $('services').innerHTML = '<p class="hint">Não consegui carregar agora. Atualize a página em instantes.</p>'; return; }
+  SH = a.data;
+  SERVICES = b.data.map(s => ({ id: s.id, name: s.name, min: s.minutes, price: s.price }));
+  BARBERS = c.data;
+  if (!BARBERS.length){ $('services').innerHTML = '<p class="hint">Nenhum profissional disponível no momento.</p>'; return; }
+  S.barber = BARBERS[0];
+  const n0 = new Date(); TODAY = new Date(n0.getFullYear(), n0.getMonth(), n0.getDate());
+  LAST = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() + SH.days_ahead - 1);
+  $('hours').textContent = `Aberto das ${SH.open_h}h às ${SH.close_h}h`;
+  S.ready = true; renderServices();
+}
+boot();
+setInterval(() => { if (S.ready && !document.hidden && !$('vSchedule').hidden && S.date) loadTaken(S.date); }, 20000);
 </script>
 </body>
 </html>
