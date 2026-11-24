@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Agenda do barbeiro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="pole" aria-hidden="true"></div>
+<main class="wrap">
+  <header>
+    <span class="eyebrow">Área do barbeiro</span>
+    <h1>Agenda</h1>
+  </header>
+
+  <section id="login">
+    <h2>Entrar</h2>
+    <form class="login" id="form">
+      <label for="email">E-mail<input type="email" id="email" autocomplete="username" required></label>
+      <label for="pass">Senha<input type="password" id="pass" autocomplete="current-password" required></label>
+      <div id="lerr" class="msg" hidden></div>
+      <button class="cta" type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <section id="panel" hidden>
+    <label for="adate">Dia<input type="date" id="adate"></label>
+    <div id="count" class="hint"></div>
+    <div id="alist" class="list"></div>
+    <button class="ghost" id="refresh">Atualizar</button>
+    <button class="link" id="out">Sair</button>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+const C = window.CONFIG, $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2,'0');
+const today = () => { const d = new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); };
+const sb = supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+let known = null, timer = null;
+
+function digits(p){ return p.replace(/\D/g,''); }
+
+async function load(beep){
+  const day = $('adate').value;
+  const { data, error } = await sb.from('bookings').select('*').eq('date', day).order('start_time');
+  if (error){ $('alist').innerHTML = '<p class="hint">Não foi possível carregar a agenda.</p>'; return; }
+  $('count').textContent = data.length ? `${data.length} agendamento${data.length>1?'s':''} em ${day.split('-').reverse().join('/')}` : '';
+  $('alist').innerHTML = data.length ? data.map(b => `
+    <div class="item">
+      <span class="h">${esc(b.start_time)}</span>
+      <div><b>${esc(b.name)}</b><small>${esc(b.service)} · R$ ${b.price}${(C.barbers||[]).length>1 ? ' · '+esc(b.barber) : ''}</small>
+        <a class="link" href="https://wa.me/55${digits(b.phone).replace(/^55/,'')}" target="_blank" rel="noopener">${esc(b.phone)}</a></div>
+      <button class="x" data-id="${esc(b.id)}">Cancelar</button>
+    </div>`).join('') : '<p class="hint">Nenhum agendamento neste dia.</p>';
+  const ids = data.map(b => b.id).join(',');
+  if (beep && known !== null && ids !== known && data.length > 0) document.title = 'Novo agendamento! · Agenda';
+  known = ids;
+}
+
+async function show(){
+  $('login').hidden = true; $('panel').hidden = false;
+  if (!$('adate').value) $('adate').value = today();
+  await load(false);
+  clearInterval(timer); timer = setInterval(() => { if (!document.hidden) load(true); }, 15000);
+}
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pass').value });
+  if (error){ $('lerr').textContent = 'E-mail ou senha incorretos.'; $('lerr').hidden = false; return; }
+  show();
+});
+$('adate').addEventListener('change', () => { known = null; load(false); });
+$('refresh').addEventListener('click', () => { document.title = 'Agenda do barbeiro'; load(false); });
+$('out').addEventListener('click', async () => { await sb.auth.signOut(); clearInterval(timer); $('panel').hidden = true; $('login').hidden = false; });
+$('alist').addEventListener('click', async e => {
+  const b = e.target.closest('[data-id]'); if (!b) return;
+  if (!confirm('Cancelar este agendamento? O horário volta a ficar livre.')) return;
+  await sb.from('bookings').delete().eq('id', b.dataset.id); load(false);
+});
+sb.auth.getSession().then(({data}) => { if (data.session) show(); });
+</script>
+</body>
+</html>

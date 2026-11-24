@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zcorte</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="pole" aria-hidden="true"></div>
+<main class="wrap">
+  <div class="top">
+    <div>
+      <span class="eyebrow" id="hours"></span>
+      <h1 id="shop"></h1>
+      <p class="sub" id="tag"></p>
+    </div>
+    <button class="cartbtn" id="cartBtn" hidden></button>
+  </div>
+
+  <!-- 1. Serviços -->
+  <section id="vServices">
+    <h2>Serviços</h2>
+    <div class="rows" id="services"></div>
+  </section>
+
+  <!-- 2. Barbeiro, dia e horário -->
+  <section id="vSchedule" hidden>
+    <h2 id="selSvc"></h2>
+    <div id="proBox">
+      <p class="lbl">Selecione o profissional</p>
+      <div class="pros" id="pros"></div>
+    </div>
+    <div class="month" id="month"></div>
+    <div class="weekbar">
+      <button class="arrow" id="prevW" aria-label="Semana anterior">‹</button>
+      <div class="week" id="week"></div>
+      <button class="arrow" id="nextW" aria-label="Próxima semana">›</button>
+    </div>
+    <p class="lbl">Selecione o horário de início</p>
+    <div class="times" id="times"></div>
+    <p class="hint" id="timeHint"></p>
+    <button class="cta" id="add" aria-disabled="true">Adicionar</button>
+    <button class="ghost" id="back1">Voltar</button>
+  </section>
+
+  <!-- 3. Carrinho e dados -->
+  <section id="vCart" hidden>
+    <h2>Seu agendamento</h2>
+    <div class="list" id="cartList"></div>
+    <label for="name">Nome<input type="text" id="name" autocomplete="name" placeholder="Digite seu nome"></label>
+    <label for="phone">Celular (WhatsApp)<input type="tel" id="phone" autocomplete="tel" inputmode="tel" placeholder="(85) 99999-9999"></label>
+    <div class="sum"><span>Total</span><span class="tot" id="total"></span></div>
+    <div id="err" class="msg" hidden></div>
+    <button class="cta" id="go" aria-disabled="true">Finalizar</button>
+    <button class="ghost" id="more">Adicionar outro serviço</button>
+  </section>
+
+  <!-- 4. Pronto -->
+  <section class="done" id="vDone" hidden>
+    <div class="big">Agendado!</div>
+    <p class="hint">Seu horário está reservado. Chegue alguns minutos antes.</p>
+    <div class="ticket" id="ticket"></div>
+    <a class="ghost" id="wa" href="#" target="_blank" rel="noopener">Avisar no WhatsApp (opcional)</a>
+    <button class="cta" id="again">Fazer outro agendamento</button>
+  </section>
+</main>
+
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="mt">
+  <div class="box">
+    <div class="ok" id="mt">Serviço adicionado</div>
+    <p class="hint">O que você gostaria de fazer agora?</p>
+    <button class="cta" id="mCont">Continuar</button>
+    <button class="ghost" id="mMore">Adicionar + serviço</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+const C = window.CONFIG, SERVICES = C.services, BARBERS = C.barbers;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2,'0');
+const ymd = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const hm = m => pad(Math.floor(m/60))+':'+pad(m%60);
+const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+const brl = v => 'R$ '+v.toLocaleString('pt-BR');
+const parse = s => { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
+const longDate = s => parse(s).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
+const dur = m => m < 60 ? m+' min' : (m%60 ? Math.floor(m/60)+'h'+pad(m%60) : Math.floor(m/60)+'h');
+const blocksOf = svc => Math.ceil(svc.min / C.step);
+
+const configured = !C.SUPABASE_URL.startsWith('COLE');
+const sb = configured ? supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY) : null;
+
+const S = { svc: null, barber: BARBERS[0], date: null, time: null, weekStart: null, cart: [], takenByDate: {}, loaded: {} };
+
+/* ---------- dias ---------- */
+const NOW0 = new Date(), TODAY = new Date(NOW0.getFullYear(), NOW0.getMonth(), NOW0.getDate());
+const LAST = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() + C.daysAhead - 1);
+const mondayOf = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay()+6)%7)); return x; };
+function dayOpen(d){
+  if (d < TODAY || d > LAST || C.closedDays.includes(d.getDay())) return false;
+  if (ymd(d) === ymd(new Date())){ const n = new Date(); if (n.getHours()*60+n.getMinutes() >= C.close*60 - C.step) return false; }
+  return true;
+}
+function firstOpenDay(){ for (let d = new Date(TODAY); d <= LAST; d.setDate(d.getDate()+1)) if (dayOpen(d)) return ymd(d); return null; }
+
+/* ---------- horários ---------- */
+function startTimes(){
+  const n = blocksOf(S.svc), res = [];
+  for (let m = C.open*60; m + n*C.step <= C.close*60; m += C.step) res.push(m);
+  return res;
+}
+function takenSet(date, barber){
+  const set = new Set((S.takenByDate[date] || []).filter(r => r.barber === barber).map(r => r.t));
+  S.cart.forEach(it => { if (it.date === date && it.barber === barber) it.times.forEach(t => set.add(t)); });
+  return set;
+}
+function isFree(m){
+  const n = blocksOf(S.svc), now = new Date(), tk = takenSet(S.date, S.barber.id);
+  if (S.date === ymd(now) && m <= now.getHours()*60 + now.getMinutes()) return false;
+  for (let i = 0; i < n; i++) if (tk.has(hm(m + i*C.step))) return false;
+  return true;
+}
+async function loadTaken(date){
+  if (!sb) return;
+  const { data, error } = await sb.from('slots').select('t,barber').eq('date', date);
+  if (error){ if (date === S.date) $('timeHint').textContent = 'Não consegui carregar os horários agora. Tente de novo em instantes.'; return; }
+  S.takenByDate[date] = data; S.loaded[date] = true;
+  if (date === S.date){ if (S.time && !isFree(toMin(S.time))) S.time = null; renderTimes(); }
+}
+
+/* ---------- telas ---------- */
+function view(name){
+  ['vServices','vSchedule','vCart','vDone'].forEach(v => $(v).hidden = v !== name);
+  window.scrollTo(0,0);
+  const n = S.cart.length;
+  $('cartBtn').hidden = !n || name === 'vCart' || name === 'vDone';
+  $('cartBtn').textContent = `Carrinho (${n})`;
+}
+function renderServices(){
+  $('services').innerHTML = SERVICES.map(s =>
+    `<div class="row"><div><b>${esc(s.name)}</b><span class="d">${dur(s.min)} · ${brl(s.price)}</span></div><button class="btn" data-id="${s.id}">Reservar</button></div>`).join('');
+}
+function renderPros(){
+  $('proBox').hidden = BARBERS.length < 2;
+  $('pros').innerHTML = BARBERS.map(b =>
+    `<button class="pro" data-id="${esc(b.id)}" aria-pressed="${b.id===S.barber.id}"><i>${esc(b.name[0].toUpperCase())}</i>${esc(b.name)}</button>`).join('');
+}
+function renderWeek(){
+  const ws = S.weekStart, days = Array.from({length:7}, (_,i) => new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+i));
+  $('month').textContent = ws.toLocaleDateString('pt-BR',{month:'long', year:'numeric'}).replace(/^./, c => c.toUpperCase());
+  $('week').innerHTML = days.map(d => {
+    const k = ymd(d);
+    return `<button class="day" data-d="${k}" ${dayOpen(d)?'':'disabled'} aria-pressed="${k===S.date}"><small>${d.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','')}</small><strong>${d.getDate()}</strong></button>`;
+  }).join('');
+  $('prevW').disabled = ws <= mondayOf(TODAY);
+  const nw = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+7);
+  $('nextW').disabled = nw > LAST;
+}
+function renderTimes(){
+  const list = startTimes();
+  $('times').innerHTML = list.map(m => {
+    const t = hm(m);
+    return `<button class="t" data-t="${t}" ${isFree(m)?'':'disabled'} aria-pressed="${S.time===t}">${t}</button>`;
+  }).join('');
+  $('timeHint').textContent = !configured ? 'Site ainda não configurado: faltam as chaves do banco de dados.'
+    : !S.loaded[S.date] ? 'Carregando horários...'
+    : list.some(isFree) ? 'Horários riscados já estão ocupados.' : 'Sem horários livres neste dia. Escolha outro dia.';
+  $('add').setAttribute('aria-disabled', S.time && configured ? 'false' : 'true');
+}
+function openSchedule(){
+  $('selSvc').textContent = S.svc.name + ' · ' + dur(S.svc.min);
+  S.time = null; S.date = firstOpenDay();
+  if (!S.date){ $('timeHint').textContent = 'Sem dias disponíveis.'; }
+  S.weekStart = mondayOf(parse(S.date || ymd(TODAY)));
+  renderPros(); renderWeek(); renderTimes(); view('vSchedule'); if (S.date) loadTaken(S.date);
+}
+function renderCart(){
+  $('cartList').innerHTML = S.cart.map((it,i) =>
+    `<div class="item"><span class="h">${it.start}</span><div><b>${esc(it.svc.name)}</b><small>${esc(longDate(it.date))}${BARBERS.length>1 ? ' · '+esc(it.barberName) : ''} · ${brl(it.svc.price)}</small></div><button class="x" data-i="${i}">Remover</button></div>`).join('');
+  $('total').textContent = brl(S.cart.reduce((a,it) => a + it.svc.price, 0));
+  const ok = configured && S.cart.length && $('name').value.trim().length > 1 && $('phone').value.replace(/\D/g,'').length >= 10;
+  $('go').setAttribute('aria-disabled', ok ? 'false' : 'true');
+}
+
+/* ---------- ações ---------- */
+function addToCart(){
+  if ($('add').getAttribute('aria-disabled') === 'true') return;
+  S.cart.push({ date: S.date, barber: S.barber.id, barberName: S.barber.name, svc: S.svc, start: S.time,
+    times: Array.from({length: blocksOf(S.svc)}, (_,i) => hm(toMin(S.time) + i*C.step)) });
+  $('modal').hidden = false;
+}
+async function finalize(){
+  if ($('go').getAttribute('aria-disabled') === 'true') return;
+  const err = $('err'); err.hidden = true;
+  $('go').setAttribute('aria-disabled','true'); $('go').textContent = 'Agendando...';
+  const items = S.cart.map(it => ({ date: it.date, barber: it.barber, service: it.svc.name, price: it.svc.price, minutes: it.svc.min, times: it.times }));
+  const { error } = await sb.rpc('book', { p_name: $('name').value.trim(), p_phone: $('phone').value.trim(), p_items: items });
+  $('go').textContent = 'Finalizar';
+  if (error){
+    if (error.code === '23505'){
+      const dates = [...new Set(S.cart.map(it => it.date))];
+      S.cart = []; await Promise.all(dates.map(loadTaken));
+      err.textContent = 'Algum horário acabou de ser reservado por outra pessoa. Escolha de novo, por favor.';
+      err.hidden = false; view('vServices'); $('services').insertAdjacentHTML('beforebegin', `<div class="msg" id="tmpMsg">${err.textContent}</div>`);
+      setTimeout(() => { const m = $('tmpMsg'); if (m) m.remove(); }, 8000);
+    } else { err.textContent = 'Não consegui agendar agora. Confira sua conexão e tente de novo.'; err.hidden = false; renderCart(); }
+    return;
+  }
+  const done = S.cart, name = $('name').value.trim();
+  $('ticket').innerHTML = done.map(it => `<div class="item"><span class="h">${it.start}</span><div><b>${esc(it.svc.name)}</b><small>${esc(longDate(it.date))}${BARBERS.length>1 ? ' · '+esc(it.barberName) : ''}</small></div><span></span></div>`).join('');
+  const msg = `Olá! Agendei na ${C.name}: ` + done.map(it => `${it.svc.name}, ${longDate(it.date)} às ${it.start}`).join('; ') + `. Nome: ${name}.`;
+  $('wa').href = 'https://wa.me/' + C.whatsapp + '?text=' + encodeURIComponent(msg);
+  S.cart = []; view('vDone');
+}
+
+$('services').addEventListener('click', e => { const b = e.target.closest('.btn'); if (!b) return; S.svc = SERVICES.find(s => s.id === b.dataset.id); openSchedule(); });
+$('pros').addEventListener('click', e => { const b = e.target.closest('.pro'); if (!b) return; S.barber = BARBERS.find(x => x.id === b.dataset.id); S.time = null; renderPros(); renderTimes(); });
+$('week').addEventListener('click', e => { const b = e.target.closest('.day'); if (!b || b.disabled) return; S.date = b.dataset.d; S.time = null; renderWeek(); renderTimes(); loadTaken(S.date); });
+$('prevW').addEventListener('click', () => { S.weekStart = new Date(S.weekStart.getFullYear(), S.weekStart.getMonth(), S.weekStart.getDate()-7); renderWeek(); });
+$('nextW').addEventListener('click', () => { S.weekStart = new Date(S.weekStart.getFullYear(), S.weekStart.getMonth(), S.weekStart.getDate()+7); renderWeek(); });
+$('times').addEventListener('click', e => { const b = e.target.closest('.t'); if (!b || b.disabled) return; S.time = b.dataset.t; renderTimes(); });
+$('add').addEventListener('click', addToCart);
+$('back1').addEventListener('click', () => view('vServices'));
+$('mCont').addEventListener('click', () => { $('modal').hidden = true; renderCart(); view('vCart'); });
+$('mMore').addEventListener('click', () => { $('modal').hidden = true; view('vServices'); });
+$('cartBtn').addEventListener('click', () => { renderCart(); view('vCart'); });
+$('more').addEventListener('click', () => view('vServices'));
+$('cartList').addEventListener('click', e => { const b = e.target.closest('.x'); if (!b) return; S.cart.splice(+b.dataset.i, 1); if (!S.cart.length) view('vServices'); else renderCart(); });
+$('name').addEventListener('input', renderCart);
+$('phone').addEventListener('input', e => {
+  const d = e.target.value.replace(/\D/g,'').slice(0,11), cut = d.length > 10 ? 7 : 6;
+  e.target.value = d.length > 2 ? '(' + d.slice(0,2) + ') ' + d.slice(2, cut) + (d.length > cut ? '-' + d.slice(cut) : '') : d;
+  renderCart();
+});
+$('go').addEventListener('click', finalize);
+$('again').addEventListener('click', () => { $('name').value = ''; $('phone').value = ''; view('vServices'); });
+
+$('shop').textContent = C.name; $('tag').textContent = C.tagline;
+$('hours').textContent = `Aberto das ${C.open}h às ${C.close}h`;
+document.title = C.name;
+renderServices(); view('vServices');
+setInterval(() => { if (!document.hidden && !$('vSchedule').hidden && S.date) loadTaken(S.date); }, 20000);
+</script>
+</body>
+</html>
