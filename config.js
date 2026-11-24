@@ -1,8 +1,8 @@
 // Cole aqui os dois valores do Supabase (Project Settings > API).
 // A chave "anon public" pode ficar no site: ela só deixa o cliente agendar e ver horários ocupados.
 window.CONFIG = {
-  SUPABASE_URL: "COLE_AQUI_A_URL_DO_PROJETO",
-  SUPABASE_ANON_KEY: "COLE_AQUI_A_CHAVE_ANON_PUBLIC",
+  SUPABASE_URL: "https://wengpbjebkbidovcsopq.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_GdE7PadY73KW3dEBl7BERA_HUCb1_vX",
 
   name: "Zcorte",
   tagline: "Escolha o serviço, o barbeiro e o horário.",

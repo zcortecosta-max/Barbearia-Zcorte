@@ -26,6 +26,10 @@ create index if not exists slots_date_idx on public.slots(date);
 alter table public.bookings enable row level security;
 alter table public.slots enable row level security;
 
+-- Permissões da API (este Supabase não libera tabelas novas sozinho).
+grant select on public.slots to anon, authenticated;
+grant select, delete on public.bookings to authenticated;
+
 -- Cliente (anônimo): só vê quais horários estão ocupados. Não vê nomes nem telefones.
 create policy "todos veem horarios ocupados" on public.slots for select to anon, authenticated using (true);
 
